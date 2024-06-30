@@ -1,0 +1,67 @@
+//pragma solidity ^0.8.0;
+
+contract CorruptionReporting {
+    struct IncidentReport {
+        address reporterAddress;
+        string reportDescription;
+        bool isVerified;
+        bool isRewarded;
+    }
+
+    address public contractAdmin;
+    uint public totalReports;
+    mapping(uint => IncidentReport) public incidentReports;
+
+    event ReportSubmitted(uint indexed reportId, address indexed reporterAddress);
+    event ReportVerified(uint indexed reportId);
+    event RewardIssued(uint indexed reportId);
+
+    modifier onlyContractAdmin() {
+        require(msg.sender == contractAdmin, "Caller is not the contract admin");
+        _;
+    }
+
+    constructor() {
+        contractAdmin = msg.sender;
+    }
+
+    function submitIncidentReport(string memory _reportDescription) public {
+        require(bytes(_reportDescription).length > 0, "Report description is required");
+
+        incidentReports[++totalReports] = IncidentReport(msg.sender, _reportDescription, false, false);
+        emit ReportSubmitted(totalReports, msg.sender);
+    }
+
+    function verifyIncidentReport(uint _reportId) public onlyContractAdmin {
+        require(_reportId > 0 && _reportId <= totalReports, "Invalid report ID");
+
+        IncidentReport storage report = incidentReports[_reportId];
+        require(!report.isVerified, "Report already verified");
+
+        report.isVerified = true;
+        emit ReportVerified(_reportId);
+    }
+
+    function issueReward(uint _reportId) public onlyContractAdmin {
+        require(_reportId > 0 && _reportId <= totalReports, "Invalid report ID");
+
+        IncidentReport storage report = incidentReports[_reportId];
+        require(report.isVerified && !report.isRewarded, "Invalid reward state");
+
+        report.isRewarded = true;
+        (bool success, ) = report.reporterAddress.call{value: 1 ether}("");
+        require(success, "Reward transfer failed");
+
+        emit RewardIssued(_reportId);
+    }
+
+    function checkInvariant() public view {
+        assert(totalReports >= 0);
+    }
+
+    function forceRevert(string memory _reason) public pure {
+        revert(_reason);
+    }
+
+    receive() external payable {}
+}
